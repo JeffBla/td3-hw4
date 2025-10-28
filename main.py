@@ -56,7 +56,15 @@ parse.add_argument('--eval_episode',
                    type=int,
                    default=10,
                    help='number of episodes for each evaluation')
+parse.add_argument('--noise_clip',
+                   type=float,
+                   default=0.5,
+                   help='noise clip for target policy smoothing')
 parse.add_argument('--seed', type=int, default=42, help='random seed')
+parse.add_argument('--twin', action='store_true', help='use twin Q-networks')
+parse.add_argument('--target_policy_smoothing',
+                   action='store_true',
+                   help='use target policy smoothing')
 args = parse.parse_args()
 
 if __name__ == '__main__':
