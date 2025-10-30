@@ -67,6 +67,7 @@ class TD3BaseAgent(ABC):
         self.twin = config["twin"]
         self.target_policy_smoothing = config["target_policy_smoothing"]
         self.noise_clip = config["noise_clip"]
+        self.exploration_noise_std = config["exploration_noise_std"]
 
         self.replay_buffer = ReplayMemory(int(
             config["replay_buffer_capacity"]))
