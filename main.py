@@ -65,6 +65,46 @@ parse.add_argument('--exploration_noise_std',
                    type=float,
                    default=0.1,
                    help='standard deviation of Gaussian exploration noise')
+# reward shaping parameters
+parse.add_argument('--use_shaping',
+                   action='store_true',
+                   help='use reward shaping or not')
+parse.add_argument('--w_onroad',
+                   type=float,
+                   default=0.5,
+                   help='weight for on road reward')
+parse.add_argument('--w_antigrass',
+                   type=float,
+                   default=0.3,
+                   help='weight for anti grass reward')
+parse.add_argument('--w_smooth',
+                   type=float,
+                   default=0.05,
+                   help='weight for smooth steering reward')
+parse.add_argument('--w_brake',
+                   type=float,
+                   default=0.02,
+                   help='weight for brake penalty')
+parse.add_argument('--brake_thresh',
+                   type=float,
+                   default=0.2,
+                   help='brake threshold')
+parse.add_argument('--w_throttle',
+                   type=float,
+                   default=0.05,
+                   help='weight for throttle reward')
+parse.add_argument('--time_penalty',
+                   type=float,
+                   default=0.001,
+                   help='time penalty per step')
+parse.add_argument('--road_min_for_ok',
+                   type=int,
+                   default=10,
+                   help='minimum road pixel count to be considered on road')
+parse.add_argument('--heavy_offroad_penalty',
+                   type=float,
+                   default=60.0,
+                   help='penalty for heavy offroad situation')
 args = parse.parse_args()
 
 if __name__ == '__main__':

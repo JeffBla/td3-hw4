@@ -12,6 +12,20 @@ import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 
 
+class RewardShaping:
+
+    def __init__(self, config):
+        self.w_onroad = config['w_onroad']
+        self.w_antigrass = config['w_antigrass']
+        self.w_smooth = config['w_smooth']
+        self.w_brake = config['w_brake']
+        self.w_throttle = config['w_throttle']
+        self.time_penalty = config['time_penalty']
+        self.heavy_offroad_penalty = config['heavy_offroad_penalty']
+        self.road_min_for_ok = config['road_min_for_ok']
+        self.brake_thresh = config['brake_thresh']
+
+
 class CarRacingEnvironment:
 
     def __init__(self, N_frame=4, config=None, writer=None, test=False):
@@ -26,6 +40,14 @@ class CarRacingEnvironment:
         self.observation_space = self.env.observation_space
         self.ep_len = 0
         self.frames = deque(maxlen=N_frame)
+        self.use_shaping = config[
+            'use_shaping'] if config is not None else False
+        self.reward_shaping = RewardShaping(config)
+        self.prev_action = np.zeros(self.action_space.shape, dtype=np.float32)
+        self.prev_prev_action = np.zeros_like(self.prev_action)
+
+        self.offroad_cd = 0
+        self.was_on_road = True
 
     def check_car_position(self, obs):
         # cut the image to get the part where the car is
@@ -48,6 +70,60 @@ class CarRacingEnvironment:
 
         return road_pixel_count, grass_pixel_count
 
+    def shape_reward(self, base_reward, action, info):
+        if self.test:
+            return base_reward
+
+        road_px = info["road_pixel_count"]
+        grass_px = info["grass_pixel_count"]
+        total_px = road_px + grass_px + 1e-6  # avoid div by zero
+        road_pixel_ratio = road_px / total_px
+        grass_pixel_ratio = grass_px / total_px
+
+        shaped_reward = base_reward
+
+        # on road reward
+        shaped_reward += self.reward_shaping.w_onroad * road_pixel_ratio
+
+        # anti grass reward
+        shaped_reward += self.reward_shaping.w_antigrass * (-grass_pixel_ratio)
+
+        # smooth steering
+        steer = float(action[0])
+        dsteer = abs(steer - float(self.prev_action[0]))
+        ddsteer = abs(steer - 2 * float(self.prev_action[0]) +
+                      float(self.prev_prev_action[0]))
+        shaped_reward += -self.reward_shaping.w_smooth * (dsteer +
+                                                          0.5 * ddsteer)
+
+        # brake penalty
+        shaped_reward += -self.reward_shaping.w_brake * max(
+            0.0, action[2] - self.reward_shaping.brake_thresh)
+
+        # throttle reward
+        shaped_reward += self.reward_shaping.w_throttle * action[1]
+
+        # time penalty
+        shaped_reward += self.reward_shaping.time_penalty * (-1)
+
+        # heavy offroad penalty
+        onroad = road_px >= self.reward_shaping.road_min_for_ok
+        if not onroad and self.was_on_road and self.offroad_cd == 0:
+            shaped_reward -= self.reward_shaping.heavy_offroad_penalty
+            self.offroad_cd = 30
+        self.was_on_road = onroad
+        if self.offroad_cd > 0:
+            self.offroad_cd -= 1
+
+        # update previous actions
+        self.prev_prev_action = self.prev_action
+        self.prev_action = action
+
+        # clip the shaped reward to avoid extreme values
+        shaped_reward = float(np.clip(shaped_reward, -5.0, 5.0))
+
+        return shaped_reward
+
     def step(self, action):
         obs, reward, terminates, truncates, info = self.env.step(action)
         original_reward = reward
@@ -57,10 +133,13 @@ class CarRacingEnvironment:
         info["road_pixel_count"] = road_pixel_count
         info["grass_pixel_count"] = grass_pixel_count
 
-        # my reward shaping strategy, you can try your own
-        if road_pixel_count < 10:
-            terminates = True
-            reward = -100
+        # TODO
+        if self.use_shaping:
+            reward = self.shape_reward(reward, action, info)
+        else:
+            if road_pixel_count < 10:
+                terminates = True
+                reward = -100
 
         # convert to grayscale
         obs = cv2.cvtColor(obs, cv2.COLOR_BGR2GRAY)  # 96x96
