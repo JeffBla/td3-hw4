@@ -11,15 +11,19 @@ from abc import ABC, abstractmethod
 
 class GaussianNoise:
 
-    def __init__(self, dim, mu=None, std=None):
-        self.mu = mu if mu else np.zeros(dim)
-        self.std = np.ones(dim) * std if std else np.ones(dim) * .1
+    def __init__(self, mu=None, std=None, device='cpu'):
+        self.mu = mu if mu is not None else 0.0
+        self.std = std if std is not None else 0.1
+        self.device = device
 
     def reset(self):
         pass
 
-    def generate(self):
-        return np.random.normal(self.mu, self.std)
+    def generate(self, action_shape):
+        return torch.normal(self.mu,
+                            self.std,
+                            action_shape,
+                            device=self.device)
 
 
 class OUNoiseGenerator:
@@ -52,7 +56,6 @@ class TD3BaseAgent(ABC):
         self.device = torch.device(
             "cuda" if self.gpu and torch.cuda.is_available() else "cpu")
         self.total_time_step = 0
-        self.training_steps = int(config["training_steps"])
         self.batch_size = int(config["batch_size"])
         self.warmup_steps = config["warmup_steps"]
         self.total_episode = config["total_episode"]
@@ -68,6 +71,8 @@ class TD3BaseAgent(ABC):
         self.replay_buffer = ReplayMemory(int(
             config["replay_buffer_capacity"]))
         self.writer = SummaryWriter(config["logdir"])
+
+        self.writer.add_text('Config', str(config))
 
     @abstractmethod
     def decide_agent_actions(self, state, sigma=0.0):
@@ -106,10 +111,13 @@ class TD3BaseAgent(ABC):
             target.data.copy_((1 - tau) * target.data + tau * behavior.data)
 
     def train(self):
-        for episode in range(self.total_episode):
+        best_score = -float('inf')
+        episode = 0
+        while episode <= self.total_episode:
             total_reward = 0
             state, infos = self.env.reset()
             self.noise.reset()
+            episode += 1
             for t in range(10000):
                 if self.total_time_step < self.warmup_steps:
                     action = self.env.action_space.sample()
@@ -121,7 +129,8 @@ class TD3BaseAgent(ABC):
                 next_state, reward, terminates, truncates, _ = self.env.step(
                     action)
                 self.replay_buffer.append(state, action, [reward / 10],
-                                          next_state, [int(terminates)])
+                                          next_state,
+                                          [int(terminates or truncates)])
                 if self.total_time_step >= self.warmup_steps:
                     self.update()
 
@@ -138,13 +147,13 @@ class TD3BaseAgent(ABC):
 
                     break
 
-            if (episode + 1) % self.eval_interval == 0:
-                # save model checkpoint
+            if episode % self.eval_interval == 0:
                 avg_score = self.evaluate()
-                self.save(
-                    os.path.join(
-                        self.writer.log_dir,
-                        f"model_{self.total_time_step}_{int(avg_score)}.pth"))
+                if best_score < avg_score:
+                    best_score = avg_score
+                    self.save(
+                        os.path.join(self.writer.log_dir, "model_best.pth"))
+                self.save(os.path.join(self.writer.log_dir, "model_last.pth"))
                 self.writer.add_scalar('Evaluate/Episode Reward', avg_score,
                                        self.total_time_step)
 

@@ -33,7 +33,7 @@ class ActorNetSimple(nn.Module):
         )
 
     def forward(self, state, brake_rate=0.015):
-        # state = state.float() / 255.0
+        state = state.float() / 255.0
         h = self.conv(state)
         h = torch.flatten(h, start_dim=1)
         h = self.linear(h)
@@ -91,7 +91,7 @@ class CriticNetSimple(nn.Module):
 
     def forward(self, state, action):
         # extract the state features
-        # state = state.float() / 255.0
+        state = state.float() / 255.0
         state_h = self.conv(state)
         state_h = torch.flatten(state_h, start_dim=1)
 

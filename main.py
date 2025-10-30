@@ -4,10 +4,6 @@ from td3_agent_CarRacing import CarRacingTD3Agent
 
 parse = argparse.ArgumentParser()
 parse.add_argument('--gpu', action='store_true', help='use gpu or not')
-parse.add_argument('--training_steps',
-                   type=int,
-                   default=1e8,
-                   help='total training steps')
 parse.add_argument('--gamma',
                    type=float,
                    default=0.99,
@@ -26,7 +22,7 @@ parse.add_argument('--warmup_steps',
                    help='steps for the warmup stage')
 parse.add_argument('--total_episode',
                    type=int,
-                   default=100000,
+                   default=1000000,
                    help='total training episodes')
 parse.add_argument('--lra',
                    type=float,
@@ -65,6 +61,10 @@ parse.add_argument('--twin', action='store_true', help='use twin Q-networks')
 parse.add_argument('--target_policy_smoothing',
                    action='store_true',
                    help='use target policy smoothing')
+parse.add_argument('--exploration_noise_std',
+                   type=float,
+                   default=0.1,
+                   help='standard deviation of Gaussian exploration noise')
 args = parse.parse_args()
 
 if __name__ == '__main__':

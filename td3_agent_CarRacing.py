@@ -60,16 +60,23 @@ class CarRacingTD3Agent(TD3BaseAgent):
         # noise_std = np.full(self.env.action_space.shape[0], 1.0, np.float32)
         # self.noise = OUNoiseGenerator(noise_mean, noise_std)
 
-        self.noise = GaussianNoise(self.env.action_space.shape[0], 0.0, 1.0)
+        self.noise = GaussianNoise(0.0, self.exploration_noise_std,
+                                   self.device)
 
     def decide_agent_actions(self, state, sigma=0.0, brake_rate=0.015):
         ### TODO ###
         # based on the behavior (actor) network and exploration noise
+        state = torch.tensor(state, dtype=torch.float32,
+                             device=self.device).unsqueeze(0)
         with torch.no_grad():
-            state = state.to(self.device)
-            action = self.actor_net(state) + sigma * self.noise.generate()
+            action = self.actor_net(state, brake_rate=brake_rate)
+            action += sigma * self.noise.generate(action.shape)
+            action = torch.clamp(
+                action,
+                torch.tensor(self.env.action_space.low, device=self.device),
+                torch.tensor(self.env.action_space.high, device=self.device))
 
-        return action
+        return action.cpu().numpy()[0]
 
     def update_behavior_network(self):
         # sample a minibatch of transitions
@@ -90,23 +97,37 @@ class CarRacingTD3Agent(TD3BaseAgent):
             # select action a_next from target actor network and add noise for smoothing
             a_next = self.target_actor_net(next_state)
             if self.target_policy_smoothing:
-                a_next += torch.clamp(self.noise.generate(), -self.noise_clip,
-                                      self.noise_clip)
+                noise = torch.clamp(self.noise.generate(a_next.shape),
+                                    -self.noise_clip, self.noise_clip)
+                a_next = a_next + noise
 
-            q_next1 = self.target_critic_net1(
-                next_state, a_next) * self.gamma + reward * (1 - done)
+            act_low = torch.as_tensor(self.env.action_space.low,
+                                      device=self.device,
+                                      dtype=a_next.dtype)
+            act_high = torch.as_tensor(self.env.action_space.high,
+                                       device=self.device,
+                                       dtype=a_next.dtype)
+            a_next = torch.clamp(a_next, act_low, act_high)
+
+            q_next1 = self.target_critic_net1(next_state, a_next)
             if self.twin:
-                q_next2 = self.target_critic_net2(
-                    next_state, a_next) * self.gamma + reward * (1 - done)
-            # select min q value from q_next1 and q_next2 (double Q learning)
-            q_target = torch.min(q_next1, q_next2) if self.twin else q_next1
+                q_next2 = self.target_critic_net2(next_state, a_next)
+                q_next = torch.min(q_next1, q_next2)
+            else:
+                q_next = q_next1
+            q_target = reward + self.gamma * (1 - done) * q_next
 
         # critic loss function
         criterion = nn.MSELoss()
         critic_loss1 = criterion(q_value1, q_target)
+
+        self.writer.add_scalar('Loss/critic_loss1', critic_loss1.item(),
+                               self.total_time_step)
+
         if self.twin:
             critic_loss2 = criterion(q_value2, q_target)
-
+            self.writer.add_scalar('Loss/critic_loss2', critic_loss2.item(),
+                                   self.total_time_step)
         # optimize critic
         self.critic_net1.zero_grad()
         critic_loss1.backward()
@@ -127,6 +148,9 @@ class CarRacingTD3Agent(TD3BaseAgent):
             action = self.actor_net(state)
             q_value = self.critic_net1(state, action)
             actor_loss = -1 * q_value.mean()
+
+            self.writer.add_scalar('Loss/actor_loss', actor_loss.item(),
+                                   self.total_time_step)
             # optimize actor
             self.actor_net.zero_grad()
             actor_loss.backward()
