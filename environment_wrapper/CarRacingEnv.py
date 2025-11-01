@@ -160,8 +160,8 @@ class CarRacingEnvironment:
 
         return obs, reward, terminates, truncates, info
 
-    def reset(self):
-        obs, info = self.env.reset()
+    def reset(self, seed=None):
+        obs, info = self.env.reset(seed=seed)
         self.ep_len = 0
         obs = cv2.cvtColor(obs, cv2.COLOR_BGR2GRAY)  # 96x96
 

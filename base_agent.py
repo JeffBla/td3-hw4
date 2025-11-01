@@ -68,6 +68,7 @@ class TD3BaseAgent(ABC):
         self.target_policy_smoothing = config["target_policy_smoothing"]
         self.noise_clip = config["noise_clip"]
         self.exploration_noise_std = config["exploration_noise_std"]
+        self.seed = config["seed"]
 
         self.replay_buffer = ReplayMemory(int(
             config["replay_buffer_capacity"]))
@@ -159,12 +160,19 @@ class TD3BaseAgent(ABC):
                                        self.total_time_step)
 
     def evaluate(self):
+        torch.manual_seed(self.seed)
+        torch.cuda.manual_seed_all(self.seed)
+        if self.seed is not None:
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
         print("==============================================")
         print("Evaluating...")
         all_rewards = []
         for episode in range(self.eval_episode):
+            self.test_env.action_space.seed(self.seed)
+            self.test_env.observation_space.seed(self.seed)
+            state, infos = self.test_env.reset(seed=self.seed)
             total_reward = 0
-            state, infos = self.test_env.reset()
             for t in range(10000):
                 action = self.decide_agent_actions(state)
                 next_state, reward, terminates, truncates, _ = self.test_env.step(
