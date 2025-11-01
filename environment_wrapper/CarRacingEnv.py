@@ -29,7 +29,7 @@ class RewardShaping:
 class CarRacingEnvironment:
 
     def __init__(self, N_frame=4, config=None, writer=None, test=False):
-        self.record_video = None
+        self.record_video = config['record_video']
         self.test = test
         self.writer = writer
         if self.record_video:

@@ -65,6 +65,16 @@ parse.add_argument('--exploration_noise_std',
                    type=float,
                    default=0.1,
                    help='standard deviation of Gaussian exploration noise')
+parse.add_argument('--ckpt',
+                   type=str,
+                   default=None,
+                   help='path to load the checkpoint')
+parse.add_argument('--eval_only',
+                   action='store_true',
+                   help='only evaluate the agent')
+parse.add_argument('--record_video',
+                   action='store_true',
+                   help='record evaluation videos')
 # reward shaping parameters
 parse.add_argument('--use_shaping',
                    action='store_true',
@@ -110,4 +120,7 @@ args = parse.parse_args()
 if __name__ == '__main__':
     config = vars(args)
     agent = CarRacingTD3Agent(config)
-    agent.train()
+    if config['eval_only'] and config['ckpt'] is not None:
+        agent.load_and_evaluate(config['ckpt'])
+    else:
+        agent.train()
